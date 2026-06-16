@@ -154,7 +154,7 @@ def extract_added_lines(diff: str) -> set[int]:
 
 def _format_body(comment: ReviewComment) -> str:
     badge = _severity_badge(comment.severity)
-    prefix = f"{badge} {comment.body.strip()}"
+    prefix = f"{badge}\n\n{comment.body.strip()}"
     if comment.suggestion:
         suggestion = comment.suggestion.strip("\n")
         return f"{prefix}\n\n```suggestion\n{suggestion}\n```"
