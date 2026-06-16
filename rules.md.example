@@ -1,0 +1,36 @@
+<!-- @author Cursor -->
+# Review Rules (Example)
+
+This is a public-safe example file used by the review bot.
+Define project-specific rules here without secrets or internal-only details.
+
+## Scope
+- Review only changed lines in the MR diff.
+- Focus on bugs, security, performance (including N+1), and architecture rule violations.
+
+## Code Quality
+- Keep business logic out of UI layers.
+- Avoid duplicated logic; extract shared functions when needed.
+- Prefer clear naming and small, testable functions.
+- Remove dead code, debug-only code, and commented-out blocks.
+
+## Security
+- Never hardcode API keys, tokens, passwords, or secrets.
+- Avoid logging sensitive user information.
+- Validate and sanitize external input.
+
+## Performance
+- Flag probable N+1 query patterns.
+- Avoid unnecessary full scans in loops when indexed lookup is possible.
+- Avoid heavy work on UI/main thread.
+
+## Testing
+- Request tests for bug fixes and critical behavior changes.
+- Ensure edge cases are covered for nullable/empty input.
+
+## Inline Comment Style
+Start each comment with one Shields.io badge:
+
+- Must fix: `![must](https://img.shields.io/badge/review-fix-red?style=flat-square)`
+- Caution: `![caution](https://img.shields.io/badge/review-caution-yellow?style=flat-square)`
+- Suggestion: `![tips](https://img.shields.io/badge/review-tips-blue?style=flat-square)`

@@ -1,0 +1,16 @@
+# @author Cursor
+# Documentation and markdown
+*.md
+docs/**
+
+# Build artifacts and temporary files
+build/**
+dist/**
+*.log
+*.tmp
+.DS_Store
+
+# IDE / platform-specific
+.idea/**
+.vscode/**
+iosApp/iosApp.xcodeproj/*

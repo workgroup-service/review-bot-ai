@@ -1,0 +1,5 @@
+python-gitlab
+langchain
+langchain-openai
+python-dotenv
+pydantic
