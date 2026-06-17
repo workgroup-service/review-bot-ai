@@ -10,6 +10,8 @@ import gitlab
 
 from config import Settings
 
+SUMMARY_MARKER = "<!-- review-bot-summary -->"
+
 
 @dataclass(frozen=True)
 class ChangedFile:
@@ -91,6 +93,15 @@ class GitLabReviewClient:
         }
         self._mr.discussions.create(payload)
 
+    def upsert_summary(self, summary_body: str) -> None:
+        body = f"{SUMMARY_MARKER}\n{summary_body.strip()}"
+        existing = self._find_existing_summary_note()
+        if existing is None:
+            self._mr.notes.create({"body": body})
+            return
+        existing.body = body
+        existing.save()
+
     def is_duplicate(
         self, comment: ReviewComment, existing_positions: set[tuple[str, int, str]]
     ) -> bool:
@@ -107,6 +118,20 @@ class GitLabReviewClient:
             return True
         username = author.get("username", "")
         return username == self._settings.bot_username
+
+    def _find_existing_summary_note(self):  # noqa: ANN202
+        notes = self._mr.notes.list(get_all=True)
+        for note in notes:
+            attrs = getattr(note, "attributes", {}) or {}
+            body = attrs.get("body", "")
+            if SUMMARY_MARKER not in body:
+                continue
+            author = attrs.get("author", {})
+            if self._settings.bot_user_id and author.get("id") == self._settings.bot_user_id:
+                return note
+            if author.get("username", "") == self._settings.bot_username:
+                return note
+        return None
 
 
 def _count_new_file_lines(diff: str) -> int:

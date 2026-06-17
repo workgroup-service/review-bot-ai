@@ -31,6 +31,9 @@ class Settings:
     review_language: str = "ja"
     gitlab_allowed_hosts: tuple[str, ...] = ("gitlab.com",)
     llm_blocked_paths: tuple[str, ...] = ()
+    output_mode: str = "inline"
+    summary_max_lines: int = 30
+    summary_max_chars: int = 3000
 
 
 def _env_or_default(name: str, default: str) -> str:
@@ -105,6 +108,13 @@ def _llm_provider(name: str = "LLM_PROVIDER", default: str = "openai") -> str:
     return normalized
 
 
+def _output_mode(name: str = "OUTPUT_MODE", default: str = "inline") -> str:
+    value = os.getenv(name, default).strip().lower() or default
+    if value not in {"inline", "summary", "both"}:
+        raise ConfigError(f"{name} must be one of: inline, summary, both")
+    return value
+
+
 def _parse_allowed_hosts(name: str = "GITLAB_ALLOWED_HOSTS") -> tuple[str, ...]:
     raw = os.getenv(name, "gitlab.com")
     hosts = [host.strip().lower() for host in raw.split(",") if host.strip()]
@@ -160,11 +170,17 @@ def _load_required_values(
     return (gitlab_token, project_id, mr_iid, openai_api_key)
 
 
-def _load_runtime_values() -> tuple[int, str, str, int | None, bool, bool, str, str]:
+def _load_runtime_values() -> tuple[int, str, str, int | None, bool, bool, str, str, str, int, int]:
     try:
         max_file_lines = int(_env_or_default("MAX_FILE_LINES", "3000"))
     except ValueError as exc:
         raise ConfigError("MAX_FILE_LINES must be an integer") from exc
+
+    try:
+        summary_max_lines = int(_env_or_default("SUMMARY_MAX_LINES", "30"))
+        summary_max_chars = int(_env_or_default("SUMMARY_MAX_CHARS", "3000"))
+    except ValueError as exc:
+        raise ConfigError("SUMMARY_MAX_LINES and SUMMARY_MAX_CHARS must be integers") from exc
 
     return (
         max_file_lines,
@@ -175,6 +191,9 @@ def _load_runtime_values() -> tuple[int, str, str, int | None, bool, bool, str, 
         _optional_bool("DRY_RUN", default=False),
         _env_or_default("LOG_LEVEL", "INFO").upper(),
         _review_language(),
+        _output_mode(),
+        summary_max_lines,
+        summary_max_chars,
     )
 
 
@@ -204,6 +223,9 @@ def load_settings() -> Settings:
         dry_run,
         log_level,
         review_language,
+        output_mode,
+        summary_max_lines,
+        summary_max_chars,
     ) = _load_runtime_values()
     gitlab_url, allowed_hosts = _load_security_values()
     llm_blocked_paths = _parse_csv_patterns("LLM_BLOCKED_PATHS")
@@ -226,4 +248,7 @@ def load_settings() -> Settings:
         review_language=review_language,
         gitlab_allowed_hosts=allowed_hosts,
         llm_blocked_paths=llm_blocked_paths,
+        output_mode=output_mode,
+        summary_max_lines=summary_max_lines,
+        summary_max_chars=summary_max_chars,
     )

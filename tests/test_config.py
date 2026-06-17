@@ -37,6 +37,9 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.platform, "gitlab")
         self.assertEqual(settings.llm_provider, "openai")
         self.assertEqual(settings.llm_blocked_paths, ())
+        self.assertEqual(settings.output_mode, "inline")
+        self.assertEqual(settings.summary_max_lines, 30)
+        self.assertEqual(settings.summary_max_chars, 3000)
         self.assertEqual(settings.model_name, "gpt-5.3-codex")
         self.assertEqual(settings.max_file_lines, 3000)
         self.assertEqual(settings.review_language, "ja")
@@ -67,6 +70,23 @@ class ConfigTests(unittest.TestCase):
             with patch("config.load_dotenv", return_value=True):
                 settings = load_settings()
         self.assertEqual(settings.llm_blocked_paths, ("secrets/**", "**/*.pem"))
+
+    def test_load_settings_parses_output_mode(self) -> None:
+        env = {
+            "GITLAB_TOKEN": "token",
+            "PROJECT_ID": "1",
+            "MR_IID": "2",
+            "OPENAI_API_KEY": "sk-test",
+            "OUTPUT_MODE": "both",
+            "SUMMARY_MAX_LINES": "10",
+            "SUMMARY_MAX_CHARS": "500",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            with patch("config.load_dotenv", return_value=True):
+                settings = load_settings()
+        self.assertEqual(settings.output_mode, "both")
+        self.assertEqual(settings.summary_max_lines, 10)
+        self.assertEqual(settings.summary_max_chars, 500)
 
 
 if __name__ == "__main__":

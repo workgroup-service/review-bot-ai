@@ -30,6 +30,9 @@ class ReviewPlatformClient(Protocol):
     ) -> None:
         ...
 
+    def upsert_summary(self, summary_body: str) -> None:
+        ...
+
 
 class ReviewEngine(Protocol):
     def review_diff(self, path: str, diff: str, rules_text: str) -> list[ReviewFinding]:

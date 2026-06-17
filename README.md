@@ -24,6 +24,9 @@ cp .env.example .env
 - `REVIEW_PLATFORM`: レビュープラットフォーム（`gitlab`、将来 `github` 対応予定）
 - `LLM_PROVIDER`: LLMプロバイダ（`openai`、将来 `anthropic` 対応予定）
 - `REVIEW_LANGUAGE`: レビューコメント言語（`ja` または `en`、デフォルト: `ja`）
+- `OUTPUT_MODE`: 投稿モード（`inline` / `summary` / `both`、デフォルト: `inline`）
+- `SUMMARY_MAX_LINES`: サマリー最大行数（デフォルト: `30`）
+- `SUMMARY_MAX_CHARS`: サマリー最大文字数（デフォルト: `3000`）
 - `GITLAB_ALLOWED_HOSTS`: 許可するGitLabホスト名のカンマ区切り（デフォルト: `gitlab.com`）
 - `LLM_BLOCKED_PATHS`: LLM送信を禁止するファイルパターンのカンマ区切り（例: `secrets/**,**/*.pem`）
 
@@ -35,6 +38,7 @@ cp .env.example .env
 - `.env` はGit管理対象外です。トークンや秘密情報は `.env` のみに保存してください。
 - 現在の実装で実運用可能な組み合わせは `REVIEW_PLATFORM=gitlab` と `LLM_PROVIDER=openai` のみです。
 - `LLM_PROVIDER=openapi` / `open-api` / `open_api` は `openai` として扱われます。
+- `OUTPUT_MODE=summary` または `both` の場合、同一MR上のサマリーノートを更新（upsert）します。
 
 ## 実行
 
