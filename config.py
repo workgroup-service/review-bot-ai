@@ -14,6 +14,8 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class Settings:
+    platform: str
+    llm_provider: str
     gitlab_token: str
     project_id: int
     mr_iid: int
@@ -28,6 +30,11 @@ class Settings:
     log_level: str = "INFO"
     review_language: str = "ja"
     gitlab_allowed_hosts: tuple[str, ...] = ("gitlab.com",)
+    llm_blocked_paths: tuple[str, ...] = ()
+
+
+def _env_or_default(name: str, default: str) -> str:
+    return os.getenv(name, default).strip() or default
 
 
 def _require(name: str) -> str:
@@ -69,12 +76,48 @@ def _review_language(name: str = "REVIEW_LANGUAGE", default: str = "ja") -> str:
     return normalized
 
 
+def _review_platform(name: str = "REVIEW_PLATFORM", default: str = "gitlab") -> str:
+    value = os.getenv(name, default).strip().lower() or default
+    aliases = {
+        "gitlab": "gitlab",
+        "gl": "gitlab",
+        "github": "github",
+        "gh": "github",
+    }
+    normalized = aliases.get(value)
+    if not normalized:
+        raise ConfigError(f"{name} must be one of: gitlab, github")
+    return normalized
+
+
+def _llm_provider(name: str = "LLM_PROVIDER", default: str = "openai") -> str:
+    value = os.getenv(name, default).strip().lower() or default
+    aliases = {
+        "openai": "openai",
+        "open-api": "openai",
+        "open_api": "openai",
+        "openapi": "openai",
+        "anthropic": "anthropic",
+    }
+    normalized = aliases.get(value)
+    if not normalized:
+        raise ConfigError(f"{name} must be one of: openai, anthropic")
+    return normalized
+
+
 def _parse_allowed_hosts(name: str = "GITLAB_ALLOWED_HOSTS") -> tuple[str, ...]:
     raw = os.getenv(name, "gitlab.com")
     hosts = [host.strip().lower() for host in raw.split(",") if host.strip()]
     if not hosts:
         raise ConfigError(f"{name} must include at least one hostname")
     return tuple(hosts)
+
+
+def _parse_csv_patterns(name: str) -> tuple[str, ...]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return ()
+    return tuple(pattern.strip() for pattern in raw.split(",") if pattern.strip())
 
 
 def _validated_gitlab_url(url: str, allowed_hosts: tuple[str, ...]) -> str:
@@ -95,33 +138,92 @@ def _validated_gitlab_url(url: str, allowed_hosts: tuple[str, ...]) -> str:
     return parsed.geturl().rstrip("/")
 
 
+def _load_required_values(
+    platform: str, llm_provider: str
+) -> tuple[str, int, int, str]:
+    gitlab_token = ""
+    project_id = 0
+    mr_iid = 0
+    openai_api_key = ""
+
+    if platform == "gitlab":
+        gitlab_token = _require("GITLAB_TOKEN")
+        try:
+            project_id = int(_require("PROJECT_ID"))
+            mr_iid = int(_require("MR_IID"))
+        except ValueError as exc:
+            raise ConfigError("PROJECT_ID and MR_IID must be integers") from exc
+
+    if llm_provider == "openai":
+        openai_api_key = _require("OPENAI_API_KEY")
+
+    return (gitlab_token, project_id, mr_iid, openai_api_key)
+
+
+def _load_runtime_values() -> tuple[int, str, str, int | None, bool, bool, str, str]:
+    try:
+        max_file_lines = int(_env_or_default("MAX_FILE_LINES", "3000"))
+    except ValueError as exc:
+        raise ConfigError("MAX_FILE_LINES must be an integer") from exc
+
+    return (
+        max_file_lines,
+        _env_or_default("MODEL_NAME", "gpt-5.3-codex"),
+        _env_or_default("BOT_USERNAME", "review-bot"),
+        _optional_int("BOT_USER_ID"),
+        _optional_bool("FAIL_FAST", default=False),
+        _optional_bool("DRY_RUN", default=False),
+        _env_or_default("LOG_LEVEL", "INFO").upper(),
+        _review_language(),
+    )
+
+
+def _load_security_values() -> tuple[str, tuple[str, ...]]:
+    allowed_hosts = _parse_allowed_hosts()
+    gitlab_url = _validated_gitlab_url(
+        _env_or_default("GITLAB_URL", "https://gitlab.com"),
+        allowed_hosts=allowed_hosts,
+    )
+    return gitlab_url, allowed_hosts
+
+
 def load_settings() -> Settings:
     load_dotenv()
-    allowed_hosts = _parse_allowed_hosts()
-
-    try:
-        project_id = int(_require("PROJECT_ID"))
-        mr_iid = int(_require("MR_IID"))
-        max_file_lines = int(os.getenv("MAX_FILE_LINES", "3000"))
-    except ValueError as exc:
-        raise ConfigError("PROJECT_ID, MR_IID, and MAX_FILE_LINES must be integers") from exc
+    platform = _review_platform()
+    llm_provider = _llm_provider()
+    gitlab_token, project_id, mr_iid, openai_api_key = _load_required_values(
+        platform=platform,
+        llm_provider=llm_provider,
+    )
+    (
+        max_file_lines,
+        model_name,
+        bot_username,
+        bot_user_id,
+        fail_fast,
+        dry_run,
+        log_level,
+        review_language,
+    ) = _load_runtime_values()
+    gitlab_url, allowed_hosts = _load_security_values()
+    llm_blocked_paths = _parse_csv_patterns("LLM_BLOCKED_PATHS")
 
     return Settings(
-        gitlab_token=_require("GITLAB_TOKEN"),
+        platform=platform,
+        llm_provider=llm_provider,
+        gitlab_token=gitlab_token,
         project_id=project_id,
         mr_iid=mr_iid,
-        openai_api_key=_require("OPENAI_API_KEY"),
-        gitlab_url=_validated_gitlab_url(
-            os.getenv("GITLAB_URL", "https://gitlab.com").strip() or "https://gitlab.com",
-            allowed_hosts=allowed_hosts,
-        ),
-        model_name=os.getenv("MODEL_NAME", "gpt-5.3-codex").strip() or "gpt-5.3-codex",
+        openai_api_key=openai_api_key,
+        gitlab_url=gitlab_url,
+        model_name=model_name,
         max_file_lines=max_file_lines,
-        bot_username=os.getenv("BOT_USERNAME", "review-bot").strip() or "review-bot",
-        bot_user_id=_optional_int("BOT_USER_ID"),
-        fail_fast=_optional_bool("FAIL_FAST", default=False),
-        dry_run=_optional_bool("DRY_RUN", default=False),
-        log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        review_language=_review_language(),
+        bot_username=bot_username,
+        bot_user_id=bot_user_id,
+        fail_fast=fail_fast,
+        dry_run=dry_run,
+        log_level=log_level,
+        review_language=review_language,
         gitlab_allowed_hosts=allowed_hosts,
+        llm_blocked_paths=llm_blocked_paths,
     )

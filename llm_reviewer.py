@@ -38,52 +38,14 @@ class LLMReviewer:
         self._review_language = "en" if review_language == "en" else "ja"
 
     def review_diff(self, path: str, diff: str, rules_text: str) -> List[ReviewFinding]:
-        system_prompt = (
-            "You are an elite code reviewer for merge requests. "
-            "Focus only on actionable issues in: bugs, performance (especially N+1), "
-            "security risks, and violations of project rules. "
-            "Do not invent context not present in the diff. "
-            "Return no findings if there is no clear issue."
+        system_prompt = _build_system_prompt(
+            review_language=self._review_language,
+            rules_text=rules_text,
         )
-        system_prompt += (
-            "\nSeverity rubric (strict):\n"
-            "- high: must-fix issues such as security risks, data corruption/loss, crashes, "
-            "auth/permission flaws, privacy leaks, and explicit must-not violations in rules.\n"
-            "- medium: likely bug risks, notable performance regressions (including probable N+1), "
-            "and correctness concerns that may break behavior.\n"
-            "- low: optional improvements or readability/maintainability suggestions with low risk.\n"
-            "If uncertain between two levels, choose the more severe one."
-        )
-        system_prompt += (
-            "\nWrite all review comments in English."
-            if self._review_language == "en"
-            else "\nWrite all review comments in Japanese."
-        )
-
-        compact_rules = _truncate_text(rules_text.strip(), max_chars=12000)
-        if compact_rules:
-            system_prompt += f"\n\nProject rules:\n{_mask_sensitive_text(compact_rules)}"
 
         findings: List[ReviewFinding] = []
         for chunk in _split_diff_into_chunks(diff, max_chunk_chars=14000):
-            human_prompt = (
-                f"File path: {path}\n"
-                "Review the unified diff below. "
-                "Use line numbers from the new file side.\n\n"
-                f"{_mask_sensitive_text(chunk)}\n\n"
-                "Return only valid JSON with this exact shape:\n"
-                '{\n'
-                '  "findings": [\n'
-                "    {\n"
-                '      "line": 123,\n'
-                '      "severity": "high|medium|low",\n'
-                '      "comment": "issue explanation",\n'
-                '      "suggestion": "optional replacement code or null"\n'
-                "    }\n"
-                "  ]\n"
-                "}\n"
-                "If there are no issues, return: {\"findings\": []}."
-            )
+            human_prompt = _build_human_prompt(path=path, diff_chunk=chunk)
 
             try:
                 raw_text = _invoke_with_retry(
@@ -129,6 +91,56 @@ def _parse_review_response(raw_text: str) -> ReviewResponseSchema:
         return ReviewResponseSchema.model_validate(payload)
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(f"Failed to parse LLM review output as JSON: {raw_text}") from exc
+
+
+def _build_system_prompt(review_language: str, rules_text: str) -> str:
+    system_prompt = (
+        "You are an elite code reviewer for merge requests. "
+        "Focus only on actionable issues in: bugs, performance (especially N+1), "
+        "security risks, and violations of project rules. "
+        "Do not invent context not present in the diff. "
+        "Return no findings if there is no clear issue."
+    )
+    system_prompt += (
+        "\nSeverity rubric (strict):\n"
+        "- high: must-fix issues such as security risks, data corruption/loss, crashes, "
+        "auth/permission flaws, privacy leaks, and explicit must-not violations in rules.\n"
+        "- medium: likely bug risks, notable performance regressions (including probable N+1), "
+        "and correctness concerns that may break behavior.\n"
+        "- low: optional improvements or readability/maintainability suggestions with low risk.\n"
+        "If uncertain between two levels, choose the more severe one."
+    )
+    system_prompt += (
+        "\nWrite all review comments in English."
+        if review_language == "en"
+        else "\nWrite all review comments in Japanese."
+    )
+
+    compact_rules = _truncate_text(rules_text.strip(), max_chars=12000)
+    if compact_rules:
+        system_prompt += f"\n\nProject rules:\n{_mask_sensitive_text(compact_rules)}"
+    return system_prompt
+
+
+def _build_human_prompt(path: str, diff_chunk: str) -> str:
+    return (
+        f"File path: {path}\n"
+        "Review the unified diff below. "
+        "Use line numbers from the new file side.\n\n"
+        f"{_mask_sensitive_text(diff_chunk)}\n\n"
+        "Return only valid JSON with this exact shape:\n"
+        '{\n'
+        '  "findings": [\n'
+        "    {\n"
+        '      "line": 123,\n'
+        '      "severity": "high|medium|low",\n'
+        '      "comment": "issue explanation",\n'
+        '      "suggestion": "optional replacement code or null"\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "If there are no issues, return: {\"findings\": []}."
+    )
 
 
 def _invoke_with_retry(client: OpenAI, model_name: str, prompt: str, max_retries: int = 4) -> str:

@@ -27,7 +27,12 @@ class ReviewIgnore:
     def should_ignore(self, relative_path: str) -> bool:
         posix_path = PurePosixPath(relative_path).as_posix()
         file_name = PurePosixPath(relative_path).name
+        ignored = False
         for pattern in self.patterns:
-            if fnmatch(posix_path, pattern) or fnmatch(file_name, pattern):
-                return True
-        return False
+            is_negation = pattern.startswith("!")
+            raw_pattern = pattern[1:] if is_negation else pattern
+            matched = fnmatch(posix_path, raw_pattern) or fnmatch(file_name, raw_pattern)
+            if not matched:
+                continue
+            ignored = not is_negation
+        return ignored

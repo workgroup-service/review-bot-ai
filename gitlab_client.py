@@ -74,8 +74,7 @@ class GitLabReviewClient:
                 if not path or not line:
                     continue
                 body = note.get("body", "")
-                body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
-                positions.add((path, int(line), body_hash))
+                positions.add((path, int(line), _body_hash(body)))
         return positions
 
     def post_inline_comment(self, comment: ReviewComment, diff_refs: dict[str, str]) -> None:
@@ -95,14 +94,12 @@ class GitLabReviewClient:
     def is_duplicate(
         self, comment: ReviewComment, existing_positions: set[tuple[str, int, str]]
     ) -> bool:
-        body_hash = hashlib.sha256(_format_body(comment).encode("utf-8")).hexdigest()
-        return (comment.path, comment.line, body_hash) in existing_positions
+        return _position_key(comment) in existing_positions
 
     def append_position_cache(
         self, comment: ReviewComment, existing_positions: set[tuple[str, int, str]]
     ) -> None:
-        body_hash = hashlib.sha256(_format_body(comment).encode("utf-8")).hexdigest()
-        existing_positions.add((comment.path, comment.line, body_hash))
+        existing_positions.add(_position_key(comment))
 
     def _is_bot_note(self, note: dict[str, Any]) -> bool:
         author = note.get("author", {})
@@ -159,6 +156,14 @@ def _format_body(comment: ReviewComment) -> str:
         suggestion = comment.suggestion.strip("\n")
         return f"{prefix}\n\n```suggestion\n{suggestion}\n```"
     return prefix
+
+
+def _position_key(comment: ReviewComment) -> tuple[str, int, str]:
+    return (comment.path, comment.line, _body_hash(_format_body(comment)))
+
+
+def _body_hash(body: str) -> str:
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def _severity_badge(severity: str) -> str:
