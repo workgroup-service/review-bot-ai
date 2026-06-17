@@ -46,6 +46,21 @@ cp .env.example .env
 python main.py --repo-root .
 ```
 
+設定ファイルを指定する場合:
+
+```bash
+python main.py --config ./configs/review-bot.env --repo-root .
+```
+
+ルール・除外ファイルを外部指定する場合:
+
+```bash
+python main.py \
+  --repo-root . \
+  --rules-file ./config/review-rules.md \
+  --reviewignore-file ./config/reviewignore.txt
+```
+
 ドライラン:
 
 ```bash
@@ -53,6 +68,9 @@ python main.py --repo-root . --dry-run
 ```
 
 `--dry-run` は GitLab への投稿のみ抑止し、差分取得・LLMレビュー・重複判定は実行されます。
+
+`--config` が未指定の場合は `.env` を読み込みます。指定ファイルが存在しない、または `KEY=VALUE` 形式でない行を含む場合はエラー終了します。
+`--rules-file` と `--reviewignore-file` が未指定の場合は、`--repo-root` 配下の `rules.md` / `.reviewignore` を利用します。
 
 ## ルール・除外設定
 

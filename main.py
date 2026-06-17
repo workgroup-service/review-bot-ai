@@ -21,9 +21,24 @@ from utils.rule_loader import load_rules
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="AI Code Review Bot for GitLab MR")
     parser.add_argument(
+        "--config",
+        default=".env",
+        help="Path to environment config file (default: .env)",
+    )
+    parser.add_argument(
         "--repo-root",
         default=".",
         help="Repository root that contains rules.md and .reviewignore",
+    )
+    parser.add_argument(
+        "--rules-file",
+        default="",
+        help="Path to rules file (default: <repo-root>/rules.md)",
+    )
+    parser.add_argument(
+        "--reviewignore-file",
+        default="",
+        help="Path to review ignore file (default: <repo-root>/.reviewignore)",
     )
     parser.add_argument(
         "--fail-fast",
@@ -56,6 +71,15 @@ def _is_llm_blocked_path(path: str, patterns: tuple[str, ...]) -> bool:
     if not patterns:
         return False
     return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
+
+
+def _resolve_optional_file(repo_root: Path, override_path: str, default_name: str) -> Path:
+    if not override_path.strip():
+        return (repo_root / default_name).resolve()
+    path = Path(override_path).expanduser()
+    if path.is_absolute():
+        return path
+    return (repo_root / path).resolve()
 
 
 @dataclass
@@ -237,7 +261,7 @@ def main() -> int:
     args = parse_args()
 
     try:
-        settings = load_settings()
+        settings = load_settings(config_path=args.config)
     except ConfigError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 2
@@ -248,8 +272,16 @@ def main() -> int:
     _configure_logging(settings)
 
     repo_root = Path(args.repo_root).resolve()
-    rules_text = load_rules(repo_root)
-    ignore = ReviewIgnore.from_file(repo_root)
+    rules_file = _resolve_optional_file(repo_root, args.rules_file, "rules.md")
+    reviewignore_file = _resolve_optional_file(repo_root, args.reviewignore_file, ".reviewignore")
+    rules_text = load_rules(
+        repo_root=rules_file.parent,
+        filename=rules_file.name,
+    )
+    ignore = ReviewIgnore.from_file(
+        repo_root=reviewignore_file.parent,
+        filename=reviewignore_file.name,
+    )
 
     client, client_exit_code = build_platform_client(settings)
     if client_exit_code != 0 or client is None:

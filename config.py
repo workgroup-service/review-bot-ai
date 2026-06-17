@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -38,6 +40,26 @@ class Settings:
 
 def _env_or_default(name: str, default: str) -> str:
     return os.getenv(name, default).strip() or default
+
+
+def _validate_config_file(config_path: str) -> Path:
+    path = Path(config_path)
+    if not path.exists():
+        raise ConfigError(f"Config file not found: {config_path}")
+    if not path.is_file():
+        raise ConfigError(f"Config path is not a file: {config_path}")
+
+    key_value_pattern = re.compile(r"^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=")
+    for idx, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not key_value_pattern.match(stripped):
+            raise ConfigError(
+                f"Invalid config format at {config_path}:{idx}. "
+                "Expected KEY=VALUE style lines."
+            )
+    return path
 
 
 def _require(name: str) -> str:
@@ -206,8 +228,9 @@ def _load_security_values() -> tuple[str, tuple[str, ...]]:
     return gitlab_url, allowed_hosts
 
 
-def load_settings() -> Settings:
-    load_dotenv()
+def load_settings(config_path: str = ".env") -> Settings:
+    validated_path = _validate_config_file(config_path)
+    load_dotenv(dotenv_path=validated_path, override=True)
     platform = _review_platform()
     llm_provider = _llm_provider()
     gitlab_token, project_id, mr_iid, openai_api_key = _load_required_values(
