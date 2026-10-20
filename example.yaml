@@ -1,0 +1,42 @@
+# @author Cursor
+stages:
+  - review
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - when: never
+
+.review_bot_base:
+  stage: review
+  image: python:3.11
+  before_script:
+    - pip install -r requirements.txt
+    - chmod +x scripts/run_gitlab_ci.sh
+  script:
+    - ./scripts/run_gitlab_ci.sh
+  variables:
+    REVIEW_PLATFORM: "gitlab"
+    LLM_PROVIDER: "openai"
+    LOG_LEVEL: "INFO"
+    REVIEW_LANGUAGE: "ja"
+    OUTPUT_MODE: "inline"
+    GITLAB_URL: "$CI_SERVER_URL"
+    GITLAB_ALLOWED_HOSTS: "gitlab.com,gitlab.example.com"
+
+# Pattern A: Standard setup (PROJECT_ID/MR_IID are auto-filled from CI variables)
+review_bot:
+  extends: .review_bot_base
+
+# Pattern B: Per-project customization (change rules and project id explicitly)
+review_bot_project_a_android:
+  extends: .review_bot_base
+  variables:
+    PROJECT_ID: "12345"
+    RULES_FILE: "project-a-android.rules.md"
+
+review_bot_project_a_ios:
+  extends: .review_bot_base
+  variables:
+    PROJECT_ID: "12345"
+    RULES_FILE: "project-a-ios.rules.md"

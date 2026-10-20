@@ -1,0 +1,8 @@
+Project A (Android)
+python main.py --repo-root . --rules-file project-a-android.rules.md --config project-a-android.env
+
+Project A (iOS)
+python main.py --repo-root . --rules-file project-a-ios.rules.md --config project-a-ios.env
+
+Project B
+python main.py --repo-root .

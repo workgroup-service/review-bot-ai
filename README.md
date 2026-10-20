@@ -84,23 +84,36 @@ python main.py --repo-root . --dry-run
 - [rules.md.example](rules.md.example)
 - [.reviewignore.example](.reviewignore.example)
 
-## GitLab CI 例
+## GitLab CI/CD 実行
 
 ```yaml
-review_bot:
-  image: python:3.11
-  stage: test
-  script:
-    - pip install -r requirements.txt
-    - python main.py --repo-root .
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-  variables:
-    PROJECT_ID: "$CI_PROJECT_ID"
-    MR_IID: "$CI_MERGE_REQUEST_IID"
-    GITLAB_URL: "$CI_SERVER_URL"
-    GITLAB_ALLOWED_HOSTS: "gitlab.com,gitlab.example.com"
+include:
+  - local: example.yaml
 ```
+
+`example.yaml` は `scripts/run_gitlab_ci.sh` を使って、CI環境変数から一時設定ファイルを生成して `main.py` を実行します。
+
+### CI/CD Variables に登録が必要な値
+
+必須:
+
+- `GITLAB_TOKEN`（`api` スコープ推奨）
+- `OPENAI_API_KEY`
+
+通常は未設定でも可（GitLab標準CI変数から自動補完）:
+
+- `PROJECT_ID`（未設定時は `CI_PROJECT_ID` を使用）
+- `MR_IID`（未設定時は `CI_MERGE_REQUEST_IID` を使用）
+- `GITLAB_URL`（未設定時は `CI_SERVER_URL` を使用）
+
+必要に応じて設定:
+
+- `GITLAB_ALLOWED_HOSTS`（例: `gitlab.com,gitlab.example.com`）
+- `REVIEW_LANGUAGE`（`ja` / `en`）
+- `OUTPUT_MODE`（`inline` / `summary` / `both`）
+- `RULES_FILE`（例: `project-a-android.rules.md`）
+- `REVIEWIGNORE_FILE`（独自 ignore を使う場合）
+- `REVIEW_BOT_ARGS`（例: `--dry-run --fail-fast`）
 
 ## Exit code
 
