@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
@@ -29,6 +30,19 @@ from PySide6.QtWidgets import (
 from app_storage import LOG_LEVELS, AppStore, GuiSettings, ProjectRow, build_review_settings
 from config import ConfigError, Settings
 from main import run_review
+
+USAGE_TEXT = """\
+1. 最初に「設定」で次を保存します。
+   - GITLAB_TOKEN
+   - OPENAI_API_KEY
+   - GITLAB_URL
+   LOG_LEVEL、SUMMARY_MAX_LINES、SUMMARY_MAX_CHARS もここで変更できます。
+2. 左上の「行を追加」でレビュー対象を追加します。行番号は 1、2、3 と増えます。
+3. プロジェクト名、プロジェクトID、マージリクエストIDを入力します。入力欄からフォーカスが外れると保存されます。
+4. 「アップロード」でレビュー仕様書（Markdown）を選びます。一度保存され、再アップロードで置き換わります。
+5. 「レビュー実行」で、その行のマージリクエストをレビューし、GitLab にコメントとサマリーを投稿します。
+6. 実行中のログは画面下部に表示されます。同時に実行できるのは 1 件です。
+"""
 
 
 class _Signals(QObject):
@@ -88,12 +102,30 @@ class ReviewApp(QWidget):
         self.log.setReadOnly(True)
         self.log.setFixedHeight(160)
         root.addWidget(self.log)
+        self.status_bar = QStatusBar()
+        usage_button = QPushButton("使い方")
+        usage_button.clicked.connect(self._show_usage)
+        self.status_bar.addPermanentWidget(usage_button)
+        root.addWidget(self.status_bar)
 
         handler = _SignalLogHandler(self._signals)
         handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
         logging.getLogger().addHandler(handler)
         logging.getLogger().setLevel(getattr(logging, self.settings.log_level, logging.INFO))
         self._render()
+
+    def _show_usage(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("使い方")
+        dialog.resize(640, 420)
+        layout = QVBoxLayout(dialog)
+        text = QPlainTextEdit(USAGE_TEXT)
+        text.setReadOnly(True)
+        layout.addWidget(text)
+        close_button = QPushButton("閉じる")
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button, alignment=Qt.AlignmentFlag.AlignRight)
+        dialog.exec()
 
     def _render(self) -> None:
         self._clear_layout(self.header)

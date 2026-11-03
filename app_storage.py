@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -10,7 +11,16 @@ from urllib.parse import urlparse
 from config import ConfigError, Settings, _validated_gitlab_url
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-DEFAULT_DATA_DIR = Path(__file__).resolve().parent / "app_data"
+
+
+def default_data_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Application Support" / "review-bot"
+        if sys.platform == "win32":
+            return Path.home() / "AppData" / "Roaming" / "review-bot"
+        return Path.home() / ".review-bot"
+    return Path(__file__).resolve().parent / "app_data"
 
 
 @dataclass
@@ -41,7 +51,7 @@ class ProjectRow:
 
 class AppStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or DEFAULT_DATA_DIR
+        self.root = root or default_data_dir()
         self.settings_path = self.root / "settings.json"
         self.projects_path = self.root / "projects.json"
         self.rules_dir = self.root / "rules"
