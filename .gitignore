@@ -1,5 +1,6 @@
 *.env
 .env
+app_data/
 venv/
 .devcontainer/
 rules.md

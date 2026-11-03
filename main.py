@@ -257,31 +257,26 @@ def _build_summary(stats: RunStats, total_files: int, settings: Settings) -> str
     return summary
 
 
-def main() -> int:
-    args = parse_args()
+def _load_rules_text(rules_path: Path, include_rules_dir: bool) -> str:
+    if include_rules_dir:
+        return load_rules(repo_root=rules_path.parent, filename=rules_path.name)
+    if rules_path.is_file():
+        return rules_path.read_text(encoding="utf-8").strip()
+    logging.warning("Rules file not found: %s", rules_path)
+    return ""
 
-    try:
-        settings = load_settings(config_path=args.config)
-    except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 2
 
-    effective_dry_run = settings.dry_run or args.dry_run
-    effective_fail_fast = settings.fail_fast or args.fail_fast
-
-    _configure_logging(settings)
-
-    repo_root = Path(args.repo_root).resolve()
-    rules_file = _resolve_optional_file(repo_root, args.rules_file, "rules.md")
-    reviewignore_file = _resolve_optional_file(repo_root, args.reviewignore_file, ".reviewignore")
-    rules_text = load_rules(
-        repo_root=rules_file.parent,
-        filename=rules_file.name,
-    )
-    ignore = ReviewIgnore.from_file(
-        repo_root=reviewignore_file.parent,
-        filename=reviewignore_file.name,
-    )
+def run_review(
+    settings: Settings,
+    rules_path: Path,
+    ignore: ReviewIgnore | None = None,
+    *,
+    include_rules_dir: bool = False,
+    dry_run: bool = False,
+    fail_fast: bool = False,
+) -> int:
+    rules_text = _load_rules_text(rules_path, include_rules_dir=include_rules_dir)
+    active_ignore = ignore if ignore is not None else ReviewIgnore(patterns=[])
 
     client, client_exit_code = build_platform_client(settings)
     if client_exit_code != 0 or client is None:
@@ -301,7 +296,7 @@ def main() -> int:
     post_summary = _should_post_summary(settings)
 
     for file in files:
-        should_review, reason = should_review_file(file, ignore, settings)
+        should_review, reason = should_review_file(file, active_ignore, settings)
         if not should_review:
             stats.skipped_count += 1
             stats.skipped_reasons[reason] += 1
@@ -317,7 +312,7 @@ def main() -> int:
                 rules_text=rules_text,
                 existing_positions=existing_positions,
                 diff_refs=diff_refs,
-                effective_dry_run=effective_dry_run,
+                effective_dry_run=dry_run,
                 allow_inline_post=post_inline,
             )
             _record_summary_candidates(stats, emitted_comments)
@@ -328,12 +323,12 @@ def main() -> int:
                 logging.exception("Failed to process %s: %s", file.path, exc)
             else:
                 logging.error("Failed to process %s: %s", file.path, exc)
-            if effective_fail_fast:
+            if fail_fast:
                 return 1
 
     if post_summary:
         summary = _build_summary(stats=stats, total_files=len(files), settings=settings)
-        if effective_dry_run:
+        if dry_run:
             logging.info("[DRY-RUN] summary prepared")
         else:
             client.upsert_summary(summary)
@@ -345,6 +340,34 @@ def main() -> int:
         f"posted={stats.posted_count} skipped={stats.skipped_count}"
     )
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+
+    try:
+        settings = load_settings(config_path=args.config)
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 2
+
+    _configure_logging(settings)
+
+    repo_root = Path(args.repo_root).resolve()
+    rules_file = _resolve_optional_file(repo_root, args.rules_file, "rules.md")
+    reviewignore_file = _resolve_optional_file(repo_root, args.reviewignore_file, ".reviewignore")
+    ignore = ReviewIgnore.from_file(
+        repo_root=reviewignore_file.parent,
+        filename=reviewignore_file.name,
+    )
+    return run_review(
+        settings,
+        rules_file,
+        ignore=ignore,
+        include_rules_dir=True,
+        dry_run=settings.dry_run or args.dry_run,
+        fail_fast=settings.fail_fast or args.fail_fast,
+    )
 
 
 if __name__ == "__main__":
