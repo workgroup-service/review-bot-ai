@@ -1,5 +1,9 @@
 *.env
 .env
+app_data/
+build/
+dist/
+*.spec
 venv/
 .devcontainer/
 rules.md
